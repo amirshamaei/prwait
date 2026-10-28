@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CSC Result Estimator</title>
+  <style>
+    :root{
+      --bg:#fbfbfa;
+      --card:#ffffff;
+      --ink:#111111;
+      --muted:#77746f;
+      --line:#e9e6e1;
+      --plot:#111111;
+      --start:#2f80ed;
+      --m1:#d81b60;
+      --m2:#6d3df5;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      min-height:100vh;
+      background:var(--bg);
+      color:var(--ink);
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      display:grid;
+      place-items:center;
+    }
+    .wrap{width:min(920px,92vw);padding:40px 0 30px}
+    .inputbar{
+      width:max-content;
+      max-width:100%;
+      margin:0 auto 24px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:10px 12px;
+      box-shadow:0 3px 14px rgba(0,0,0,.035);
+    }
+    label{font-size:13px;color:var(--muted)}
+    input[type=date]{
+      border:0;background:transparent;outline:none;
+      font:inherit;font-size:14px;color:var(--ink);padding:7px 4px;
+    }
+    button{
+      border:0;background:var(--ink);color:#fff;
+      border-radius:10px;padding:9px 13px;
+      font:inherit;font-size:13px;cursor:pointer;
+    }
+    .panel{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:24px;
+      padding:24px;
+      box-shadow:0 8px 30px rgba(0,0,0,.035);
+    }
+    .title{
+      font-size:12px;color:var(--muted);
+      text-transform:uppercase;letter-spacing:.09em;margin-bottom:14px;
+    }
+    .models{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+    }
+    .model{
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:18px;
+      min-height:150px;
+    }
+    .model h2{
+      margin:0 0 6px;
+      font-size:13px;font-weight:650;
+    }
+    .model .date{
+      font-size:clamp(24px,3.5vw,36px);
+      font-weight:680;
+      letter-spacing:-.035em;
+      margin:6px 0 8px;
+    }
+    .meta{
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.55;
+    }
+    .interval{
+      margin-top:8px;
+      padding-top:8px;
+      border-top:1px solid var(--line);
+      color:#55514c;
+      font-size:11px;
+      line-height:1.45;
+    }
+    .dot{
+      width:8px;height:8px;border-radius:50%;
+      display:inline-block;margin-right:7px;
+    }
+    .m1 .dot{background:var(--m1)}
+    .m2 .dot{background:var(--m2)}
+    svg{
+      width:100%;height:290px;display:block;margin-top:22px;
+    }
+    .axis{stroke:#ddd9d3;stroke-width:2;stroke-linecap:round}
+    .curve{fill:none;stroke:#111111;stroke-width:7;stroke-linecap:round;stroke-linejoin:round}
+    .m1line,.m2line{fill:none;stroke:#111111;stroke-width:0;opacity:0}
+    .startTitle{fill:var(--start);font-size:16px;font-weight:700}
+    .end1Title{fill:var(--m1);font-size:15px;font-weight:700}
+    .end2Title{fill:var(--m2);font-size:15px;font-weight:700}
+    .tiny{fill:#8d8984;font-size:11px}
+    .dateText{fill:#5f5b56;font-size:12px;font-weight:600}
+    
+    details{
+      margin-top:14px;
+      border-top:1px solid var(--line);
+      padding-top:12px;
+      color:var(--muted);
+      font-size:11px;
+      line-height:1.6;
+    }
+    summary{cursor:pointer;color:#69655f}
+    .foot{
+      margin-top:12px;
+      text-align:center;
+      color:#96918b;
+      font-size:10.5px;
+      line-height:1.5;
+    }
+    @media(max-width:650px){
+      .models{grid-template-columns:1fr}
+      .inputbar{width:100%;justify-content:space-between}
+      .panel{padding:18px 14px}
+      svg{height:265px}
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="inputbar">
+      <label for="csc">CSC date</label>
+      <input id="csc" type="date">
+      <button id="go">Estimate</button>
+    </div>
+
+    <section class="panel">
+      <div class="title">Estimated security-screening result</div>
+
+      <div class="models">
+        <div class="model m1">
+          <h2><span class="dot"></span>Model 1 · waiting-time trend</h2>
+          <div class="date" id="m1Date">—</div>
+          <div class="meta" id="m1Meta">Quadratic annual waiting-time model.</div>
+          <div class="interval" id="m1Interval">95% model interval: —</div>
+        </div>
+
+        <div class="model m2">
+          <h2><span class="dot"></span>Model 2 · inventory / queue</h2>
+          <div class="date" id="m2Date">—</div>
+          <div class="meta" id="m2Meta">PR inventory and observed completion throughput.</div>
+          <div class="interval" id="m2Interval">95% model interval: —</div>
+        </div>
+      </div>
+
+      <svg viewBox="0 0 820 290" aria-label="CSC estimate curve">
+        <line class="axis" x1="74" y1="226" x2="744" y2="226"/>
+
+        <path class="curve"
+          d="M84 210
+             C205 210, 286 184, 372 132
+             C458 80, 548 43, 652 32"/>
+
+        <path id="m1Progress" class="m1line"
+          d="M84 210
+             C205 210, 286 184, 368 136
+             C448 89, 526 55, 620 44"/>
+
+        <path id="m2Progress" class="m2line"
+          d="M84 210
+             C202 210, 286 182, 374 128
+             C464 73, 558 39, 652 32"/>
+
+        <circle cx="84" cy="210" r="8" fill="#2f80ed"/>
+        <text class="startTitle" x="46" y="191">Start</text>
+        <text id="startDateLabel" class="dateText" x="46" y="247">—</text>
+
+        <circle id="m1Dot" cx="620" cy="44" r="8" fill="#d81b60"/>
+        <circle id="m2Dot" cx="652" cy="32" r="8" fill="#6d3df5"/>
+
+        <text class="end1Title" x="548" y="65">End · Model 1</text>
+        <text id="m1DateLabel" class="dateText" x="548" y="82">—</text>
+
+        <text class="end2Title" x="656" y="25">End · Model 2</text>
+        <text id="m2DateLabel" class="dateText" x="656" y="42">—</text>
+      </svg>
+
+      <details>
+        <summary>How the two models work</summary>
+        <div style="margin-top:8px">
+          <b>Model 1:</b>
+          W(t) = 15.90t² + 28.74t + 46.94, with t = completion year − 2021.
+          The calculator finds the earliest self-consistent completion year. Its 95% interval uses the OLS prediction band from the five annual observations.
+          <br><br>
+          <b>Model 2:</b>
+          the PR inventory is fitted with a quadratic using the reported monthly inventory from
+          Dec 2024–Nov 2025 plus the observed Apr 1, 2026 inventory of 27,454.
+          The estimated queue at the CSC date is divided by the observed PR output rate
+          from Dec 2024–Nov 2025: 9,215 completions / 12 ≈ 768 per month. Its 95% interval uses a delta-method propagation of uncertainty in the inventory fit and the mean monthly output.
+        </div>
+      </details>
+
+      <div class="foot">
+        Experimental trend models only — not an official IRCC/CBSA processing-time calculator.
+        Security screening is not strictly FIFO and individual files can finish much earlier or later. The intervals quantify model-fit uncertainty, not a guaranteed 95% range for an individual applicant.
+      </div>
+    </section>
+  </main>
+
+<script>
+  const csc = document.getElementById('csc');
+  const go = document.getElementById('go');
+
+  const m1Date = document.getElementById('m1Date');
+  const m2Date = document.getElementById('m2Date');
+  const m1Meta = document.getElementById('m1Meta');
+  const m2Meta = document.getElementById('m2Meta');
+  const m1Interval = document.getElementById('m1Interval');
+  const m2Interval = document.getElementById('m2Interval');
+
+  const startDateLabel = document.getElementById('startDateLabel');
+  const m1DateLabel = document.getElementById('m1DateLabel');
+  const m2DateLabel = document.getElementById('m2DateLabel');
+
+  const m1Progress = document.getElementById('m1Progress');
+  const m2Progress = document.getElementById('m2Progress');
+
+  const AVG_OUTPUT_MONTH = 9215 / 12;
+
+  const INV_A = 23.36692706;
+  const INV_B = 45.30687677;
+  const INV_C = 20830.558878;
+
+  // Model 1 OLS uncertainty from annual observations:
+  // [52.0, 85.1, 157.1, 297.3, 407.6] days for 2021-2025.
+  // Cov(beta) for beta = [t^2, t, 1].
+  const M1_COV = [
+    [25.18614286, -100.74457143, 50.37228571],
+    [-100.74457143, 438.23888571, -272.01034286],
+    [50.37228571, -272.01034286, 312.30817143]
+  ];
+  const M1_SIGMA2 = 352.606;          // residual variance, df = 2
+  const M1_T95 = 4.30265273;          // t(0.975, 2)
+
+  // Model 2 OLS covariance for inventory quadratic.
+  const M2_COV = [
+    [71.40941950, -1000.58304368, 2215.53704687],
+    [-1000.58304368, 15559.43485703, -40590.73944424],
+    [2215.53704687, -40590.73944424, 154748.57165527]
+  ];
+  // Monthly PR completion sample: mean 767.9167, SE 65.6428.
+  const OUTPUT_SE = 65.64279581;
+
+  function localDateFromInput(v){
+    const [y,m,d] = v.split('-').map(Number);
+    return new Date(y,m-1,d,12,0,0);
+  }
+
+  function addDays(d,n){
+    const x = new Date(d);
+    x.setDate(x.getDate() + n);
+    return x;
+  }
+
+  function addMonthsApprox(d,m){
+    return addDays(d, m * 30.4375);
+  }
+
+  function daysBetween(a,b){
+    return (b-a) / 86400000;
+  }
+
+  function fmt(d){
+    return new Intl.DateTimeFormat('en-CA',{
+      year:'numeric', month:'short', day:'numeric'
+    }).format(d);
+  }
+
+  function model1(start){
+    for(let year = Math.max(start.getFullYear(), 2021); year <= 2045; year++){
+      const t = year - 2021;
+      const wait = 15.90*t*t + 28.74*t + 46.94;
+      const end = addDays(start, wait);
+      if(end.getFullYear() === year){
+        return {end, wait};
+      }
+    }
+    return null;
+  }
+
+  const invBase = new Date(2024,11,31,12,0,0);
+
+  function estimatedInventory(date){
+    const months = daysBetween(invBase,date) / 30.4375;
+    return Math.max(0, INV_A*months*months + INV_B*months + INV_C);
+  }
+
+  function model2(start){
+    const inventory = estimatedInventory(start);
+    const waitMonths = inventory / AVG_OUTPUT_MONTH;
+    const end = addMonthsApprox(start, waitMonths);
+    return {
+      end,
+      inventory,
+      waitMonths,
+      waitDays: waitMonths * 30.4375
+    };
+  }
+
+  function setDash(path,pct,offsetPx=0){
+    const len = path.getTotalLength();
+    path.style.strokeDasharray = len;
+    path.style.strokeDashoffset = len * (1-Math.max(0,Math.min(1,pct))) + offsetPx;
+  }
+
+
+  function quadForm3(v, M){
+    let s = 0;
+    for(let i=0;i<3;i++){
+      for(let j=0;j<3;j++) s += v[i]*M[i][j]*v[j];
+    }
+    return s;
+  }
+
+  function model1Interval(start, result){
+    const year = result.end.getFullYear();
+    const t = year - 2021;
+    const v = [t*t, t, 1];
+    const fitVar = Math.max(0, quadForm3(v, M1_COV));
+    // Prediction band = coefficient uncertainty + residual model error.
+    const sePred = Math.sqrt(fitVar + M1_SIGMA2);
+    const loDays = Math.max(0, result.wait - M1_T95 * sePred);
+    const hiDays = result.wait + M1_T95 * sePred;
+    return {
+      lo: addDays(start, loDays),
+      hi: addDays(start, hiDays)
+    };
+  }
+
+  function model2Interval(start, result){
+    const months = daysBetween(invBase,start) / 30.4375;
+    const v = [months*months, months, 1];
+    const invVar = Math.max(0, quadForm3(v, M2_COV));
+    const invSE = Math.sqrt(invVar);
+
+    // Delta-method uncertainty for waitMonths = inventory / output.
+    const outMean = AVG_OUTPUT_MONTH;
+    const dInv = 1 / outMean;
+    const dOut = -result.inventory / (outMean*outMean);
+    const waitVar = dInv*dInv*invVar + dOut*dOut*OUTPUT_SE*OUTPUT_SE;
+    const waitSE = Math.sqrt(Math.max(0, waitVar));
+    const loMonths = Math.max(0, result.waitMonths - 1.96*waitSE);
+    const hiMonths = result.waitMonths + 1.96*waitSE;
+    return {
+      lo: addMonthsApprox(start, loMonths),
+      hi: addMonthsApprox(start, hiMonths)
+    };
+  }
+
+  function render(){
+    if(!csc.value) return;
+
+    const start = localDateFromInput(csc.value);
+    const r1 = model1(start);
+    const r2 = model2(start);
+    const ci1 = r1 ? model1Interval(start, r1) : null;
+    const ci2 = model2Interval(start, r2);
+
+    startDateLabel.textContent = fmt(start);
+
+    if(r1){
+      m1Date.textContent = fmt(r1.end);
+      m1DateLabel.textContent = fmt(r1.end);
+      m1Meta.textContent =
+        `${Math.round(r1.wait).toLocaleString()} days · ${(r1.wait/30.4375).toFixed(1)} months`;
+      m1Interval.textContent = `95% model interval: ${fmt(ci1.lo)} – ${fmt(ci1.hi)}`;
+    }else{
+      m1Date.textContent = 'No solution';
+      m1DateLabel.textContent = 'No solution';
+      m1Meta.textContent = 'No self-consistent year found within model range.';
+      m1Interval.textContent = '95% model interval: —';
+    }
+
+    m2Date.textContent = fmt(r2.end);
+    m2DateLabel.textContent = fmt(r2.end);
+    m2Meta.textContent =
+      `Estimated queue ${Math.round(r2.inventory).toLocaleString()} · ` +
+      `${r2.waitMonths.toFixed(1)} months at ~${Math.round(AVG_OUTPUT_MONTH)}/month`;
+    m2Interval.textContent = `95% model interval: ${fmt(ci2.lo)} – ${fmt(ci2.hi)}`;
+
+    const today = new Date();
+    if(r1){
+      const p1 = daysBetween(start,today) / Math.max(1,daysBetween(start,r1.end));
+      setDash(m1Progress,p1);
+    }
+    const p2 = daysBetween(start,today) / Math.max(1,daysBetween(start,r2.end));
+    setDash(m2Progress,p2,7);
+  }
+
+  go.addEventListener('click',render);
+  csc.addEventListener('change',render);
+
+  csc.value = '2025-08-22';
+  render();
+</script>
+</body>
+</html>
